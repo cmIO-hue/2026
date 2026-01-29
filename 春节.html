@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2026新年快乐</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            overflow: hidden; 
+            background: #000; 
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+        }
+        #fireworkCanvas { 
+            display: block; 
+            background: #000; 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            z-index: 1; 
+            width: 100vw; 
+            height: 100vh;
+        }
+        /* 倒计时/2026数字画布：严格居中，视觉核心区 */
+        #countdownCanvas { 
+            position: fixed; 
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5; 
+            display: none;
+            object-fit: contain;
+            max-width: 90vw;
+            max-height: 50vh;
+        }
+        /* 2026像素数字画布：独立画布，等宽放大 */
+        #year2026Canvas {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 6;
+            display: none;
+            object-fit: contain;
+            max-width: 95vw;
+            max-height: 60vh;
+        }
+        .text-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            }
+        .main-text {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            margin: 0;
+            color: #fff;
+            font-size: clamp(24px, 7vw, 60px);
+            font-weight: bold;
+            text-shadow: 0 0 25px #ffd700, 0 0 50px #ff0000, 0 0 80px #ff0000;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            }
+        .main-text.active {
+            opacity: 1;
+            }
+        .control-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: clamp(12px, 3vw, 14px);
+            opacity: 0.9;
+            z-index: 20;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 18px;
+            border-radius: 12px;
+            bottom: 20px !important;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .click-tip {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffd700;
+            font-size: 26px;
+            text-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000;
+            z-index: 100;
+            text-align: center;
+            background: rgba(0,0,0,0.5);
+            padding: 12px 24px;
+            border-radius: 18px;
+        }
+         /* 核心样式：控制图片位置 */
+        .top-right-image {
+            position: fixed; /* 固定定位，滚动页面时位置不变 */
+            top: 20px;       /* 距离顶部20px，可自行调整 */
+            right: 20px;     /* 距离右侧20px，可自行调整 */
+            width: clamp(80px, 25vw, 120px);   /* 设置图片宽度，高度会自动等比例缩放 */
+            z-index: 101; /* 高于所有元素，避免被遮挡 */
+        }
+    </style>
+</head>
+<body>
+    <img 
+        class="top-right-image" 
+        src="./春.png"
+    >
+    <div class="click-tip" id="clickTip">点击屏幕 → 启动音乐+倒计时+烟花</div>
+    <canvas id="fireworkCanvas"></canvas>
+    <!-- 倒计时数字画布 -->
+    <canvas id="countdownCanvas"></canvas>
+    <!-- 2026像素数字画布 -->
+    <canvas id="year2026Canvas"></canvas>
+    <div class="text-overlay" id="textOverlay">
+        <div class="main-text" id="text0">新</div>
+        <div class="main-text" id="text1">年</div>
+        <div class="main-text" id="text2">快</div>
+        <div class="main-text" id="text3">乐</div>
+        <div class="main-text" id="text4">愿我们</div>
+        <div class="main-text" id="text5">新的一年</div>
+        <div class="main-text" id="text6">好运+1</div>
+        <div class="main-text" id="text7">幸福+1</div>
+        <div class="main-text" id="text8">健康+1</div>
+        <div class="main-text" id="text9">财富+1</div>
+        <div class="main-text" id="text10">平安喜乐</div>
+        <div class="main-text" id="text11">万事顺利</div>
+        <div class="main-text" id="text12">2026新年快乐!</div>
+    </div>
+    <div class="control-panel">
+    空格=批量烟花 | F11=全屏 | ESC=退出全屏
+    </div>
+    <!-- 新增重启按钮：默认隐藏，结束后显示 -->
+    <button id="restartBtn" style="
+        position: fixed;
+        top: 60%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 99;
+        padding: 15px 40px;
+        font-size: 24px;
+        font-weight: bold;
+        color: #fff;
+        background: linear-gradient(#ffd700, #ff9900);
+        border: none;
+        border-radius: 50px;
+        box-shadow: 0 0 20px #ff0000;
+        cursor: pointer;
+        display: none;
+    ">
+        重新开始
+    </button>
+
+    <script>
+        // 像素数字点阵（7x9 等宽设计，0和其他数字视觉一致）
+        const pixelDigits = {
+            5: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
+            4: [[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
+            3: [[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
+            2: [[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
+            1: [[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1]],
+            // 0：优化点阵，和2/6保持等宽，视觉统一
+            0: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
+            6: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]]
+        };
+
+        // 🔥新增：渐变变白控制变量（仅用于倒计时，2026不再使用）
+        let countdownBrightness = 0;    // 倒计时亮度（0-1，1为纯白）
+        const brightnessStep = 0.09;    // 每次渐变的步长（越小越慢）
+        let isCountdownFading = false;  // 倒计时是否开始渐变
+
+        // 新增：判断是否为手机端（屏幕宽度<768px）
+        const isMobile = window.innerWidth < 768;
+
+        // 核心配置：🔥【2026等宽放大】+ 0视觉统一 + 54321匀速0.8秒
+        const cfg = {
+            digitSize: isMobile ? 40 : 50,     // 倒计时数字大小
+            yearDigitSize: isMobile ? 300 : 400, // 2026数字大小（放大更醒目）
+            color: '#ffd700',  // 像素主色（金色）
+            glow: '#ff9900',   // 发光色（暖橙金，更柔和）
+            year2026Color: '#ff0000', // 2026数字主色（红色）
+            year2026Glow: '#ff3333',  // 2026发光色（亮红）
+            interval: 0.8,     // 倒计时数字统一间隔（秒）
+            startT: 4.5,       // 倒计时启动时间（人声结束瞬间）
+            fireworkRate: isMobile ? 0.02 : 0.03,// 烟花自动生成速度
+            yearShowTime: 8000,// 2026数字显示时长（毫秒）
+            digitGap: 3,       // 2026数字间距（适中，不拥挤）
+            scaleRatio: isMobile ? 1.0 : 1.2   // 2026整体r缩放比例（更大占比）
+        };
+        // 自动生成匀速时间轴
+        cfg.timeline = [
+            {t: cfg.startT, d: 5},
+            {t: cfg.startT + cfg.interval, d: 4},
+            {t: cfg.startT + cfg.interval*2, d: 3},
+            {t: cfg.startT + cfg.interval*3, d: 2},
+            {t: cfg.startT + cfg.interval*4, d: 1},
+            {t: cfg.startT + cfg.interval*5, d: null}
+        ];
+
+        // 全局元素初始化
+        const [fwCanvas, fwCtx] = [document.getElementById('fireworkCanvas'), document.getElementById('fireworkCanvas').getContext('2d')];
+        const [cdCanvas, cdCtx] = [document.getElementById('countdownCanvas'), document.getElementById('countdownCanvas').getContext('2d')];
+        const [yearCanvas, yearCtx] = [document.getElementById('year2026Canvas'), document.getElementById('year2026Canvas').getContext('2d')];
+        const [textOverlay, clickTip] = [document.getElementById('textOverlay'), document.getElementById('clickTip')];
+        const textEls = Array.from(document.querySelectorAll('.main-text'));
+        const restartBtn = document.getElementById('restartBtn'); // 🔥新增重启按钮变量
+        let [isInited, isCdEnd, isYearShow, cdIdx, textIdx, textTime, yearShowStart] = [false, false, false, 0, 0, 0, 0];
+        let isFinished = false; // 🔥新增：标记流程是否结束
+        // 背景音乐（保留你的路径）
+        const audio = new Audio("./终会与你同行.mp3"); 
+        audio.loop = false; audio.volume = 0.9; audio.preload = 'auto';
+
+        // 烟花文字列表+配色
+        const fwTexts = ["5","4","3","2","1","2026","新","年","快","乐","2026新年快乐"];
+        const colors = ['#ff0000','#ff6600','#ffd700','#ffff00','#00ff00','#00ffff','#9900ff','#ffffff'];
+        let fireworks = [];
+
+        // 画布自适应：窗口缩放时，所有数字始终居中，2026等宽放大
+        function resize() {
+            // 烟花画布
+            fwCanvas.width = window.innerWidth;
+            fwCanvas.height = window.innerHeight;
+
+            // 倒计时画布适配
+            const cdScale = Math.min(window.innerWidth, window.innerHeight) * 0.3 / (7 * cfg.digitSize);
+            cdCanvas.width = 7 * cfg.digitSize * cdScale * window.devicePixelRatio;
+            cdCanvas.height = 9 * cfg.digitSize * cdScale * window.devicePixelRatio;
+            cdCanvas.style.width = `${7 * cfg.digitSize * cdScale}px`;
+            cdCanvas.style.height = `${9 * cfg.digitSize * cdScale}px`;
+            cdCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            // 2026画布适配：等宽放大，预留间距
+            const totalWidth = 4 * (7 + cfg.digitGap) * cfg.yearDigitSize;
+            const yearScale = Math.min(window.innerWidth, window.innerHeight) * cfg.scaleRatio / totalWidth;
+            yearCanvas.width = totalWidth * yearScale * window.devicePixelRatio;
+            yearCanvas.height = 9 * cfg.yearDigitSize * yearScale * window.devicePixelRatio;
+            yearCanvas.style.width = `${totalWidth * yearScale}px`;
+            yearCanvas.style.height = `${9 * cfg.yearDigitSize * yearScale}px`;
+            yearCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        resize(); 
+        window.addEventListener('resize', resize);
+
+        // 绘制单个像素数字（倒计时用，保留渐变变白效果）
+        function drawDigit(d) {
+            const scale = Math.min(window.innerWidth, window.innerHeight) * 0.3 / (7 * cfg.digitSize);
+            cdCtx.clearRect(0, 0, cdCanvas.width/window.devicePixelRatio, cdCanvas.height/window.devicePixelRatio);
+            
+            // 计算渐变颜色（从金色→白色）
+            const baseColor = cfg.color.replace('#', '');
+            const r = parseInt(baseColor.slice(0, 2), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(0, 2), 16)));
+            const g = parseInt(baseColor.slice(2, 4), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(2, 4), 16)));
+            const b = parseInt(baseColor.slice(4, 6), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(4, 6), 16)));
+            
+            // 发光效果渐变
+            const glowColor = cfg.glow.replace('#', '');
+            const glowR = parseInt(glowColor.slice(0, 2), 16) + Math.floor(countdownBrightness * (255 - parseInt(glowColor.slice(0, 2), 16)));
+            const glowG = parseInt(glowColor.slice(2, 4), 16) + Math.floor(countdownBrightness * (255 - parseInt(glowColor.slice(2, 4), 16)));
+            const glowB = parseInt(glowColor.slice(4, 6), 16) + Math.floor(countdownBrightness * (255 - parseInt(glowColor.slice(4, 6), 16)));
+            
+            cdCtx.shadowColor = `rgb(${glowR}, ${glowG}, ${glowB})`; 
+            cdCtx.shadowBlur = 30 * scale + countdownBrightness * 20 * scale; 
+            cdCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            
+            pixelDigits[d].forEach((row, y) => {
+                row.forEach((dot, x) => {
+                    if (dot) cdCtx.fillRect(
+                        x * cfg.digitSize * scale, 
+                        y * cfg.digitSize * scale, 
+                        (cfg.digitSize - 4) * scale, 
+                        (cfg.digitSize - 4) * scale
+                    );
+                });
+            });
+            
+            // 渐变进度更新
+            if (isCountdownFading && countdownBrightness < 1) {
+                countdownBrightness += brightnessStep;
+                if (countdownBrightness > 1) countdownBrightness = 1;
+                requestAnimationFrame(() => drawDigit(d));
+            }
+        }
+
+        // 绘制2026像素数字：等宽放大，直接显示红色（无渐变）
+        function draw2026() {
+            const totalWidth = 4 * (7 + cfg.digitGap) * cfg.yearDigitSize;
+            const scale = Math.min(window.innerWidth, window.innerHeight) * cfg.scaleRatio / totalWidth;
+            yearCtx.clearRect(0, 0, yearCanvas.width/window.devicePixelRatio, yearCanvas.height/window.devicePixelRatio);
+            
+            // 霓虹渐变效果：红色→金色
+            const gradient = yearCtx.createLinearGradient(0, 0, totalWidth * scale, 0);
+            gradient.addColorStop(0, '#ff0000');
+            gradient.addColorStop(0.5, '#ffd700');
+            gradient.addColorStop(1, '#ff0000');
+            
+            // 双层发光：外层红色光晕+内层金色光晕
+            yearCtx.shadowColor = '#ff3333';
+            yearCtx.shadowBlur = 60 * scale;
+            yearCtx.fillStyle = gradient;
+            
+            const yearDigits = [2,0,2,6];
+            yearDigits.forEach((digit, idx) => {
+                const offsetX = idx * (7 + cfg.digitGap) * cfg.yearDigitSize * scale;
+                pixelDigits[digit].forEach((row, y) => {
+                    row.forEach((dot, x) => {
+                        if (dot) yearCtx.fillRect(
+                            offsetX + x * cfg.yearDigitSize * scale, 
+                            y * cfg.yearDigitSize * scale, 
+                            (cfg.yearDigitSize - 4) * scale, 
+                            (cfg.yearDigitSize - 4) * scale
+                        );
+                    });
+                });
+            });
+        }
+
+        // 烟花粒子类
+        class Particle {
+            constructor(x, y, c, dx, dy) {
+                this.x = x; this.y = y; this.c = c;
+                this.life = Math.random()*80+60; this.maxL = this.life;
+                this.s = Math.random()*3+2; 
+                this.dx = dx; this.dy = dy; 
+                this.g = 0.05; 
+                this.decay = 0.96; 
+            }
+            update() {
+                this.dy += this.g; 
+                this.x += this.dx; 
+                this.y += this.dy;
+                this.dx *= this.decay; 
+                this.dy *= this.decay;
+                this.life--; 
+                const alpha = this.life/this.maxL;
+                fwCtx.beginPath(); 
+                fwCtx.arc(this.x, this.y, this.s*alpha, 0, Math.PI*2);
+                fwCtx.fillStyle = `${this.c}${Math.floor(alpha*255).toString(16).padStart(2, '0')}`; 
+                fwCtx.fill();
+                return this.life > 0;
+            }
+        }
+
+        // 文字烟花类
+        class TextFirework {
+            constructor(x = Math.random()*window.innerWidth, y = window.innerHeight) {
+                this.x = x; this.y = y;
+                this.text = fwTexts[Math.floor(Math.random()*fwTexts.length)];
+                this.color = colors[Math.floor(Math.random()*colors.length)];
+                this.speed = Math.random()*10+7; 
+                this.targetY = Math.random()*(window.innerHeight/2)+80; 
+                this.exploded = false; 
+                this.particles = []; 
+                this.genTextPath(); 
+            }
+            genTextPath() {
+                const tCanvas = document.createElement('canvas'); 
+                const tCtx = tCanvas.getContext('2d');
+                const fs = this.text.length>4 ? 50 : 70; 
+                tCanvas.width = 300; 
+                tCanvas.height = 300;
+                tCtx.font = `bold ${fs}px SimHei`; 
+                tCtx.textAlign = 'center'; 
+                tCtx.textBaseline = 'middle';
+                tCtx.fillText(this.text, 150, 150); 
+                const data = tCtx.getImageData(0,0,300,300).data;
+                for (let y=0; y<300; y+=5) {
+                    for (let x=0; x<300; x+=5) {
+                        if (data[(y*300+x)*4+3] > 128) {
+                            this.particles.push([(x-150)/150, (y-150)/150]);
+                        }
+                    }
+                }
+            }
+            rise() {
+                fwCtx.beginPath(); 
+                fwCtx.arc(this.x, this.y, 5, 0, Math.PI*2); 
+                fwCtx.fillStyle = this.color; 
+                fwCtx.fill();
+                this.y -= this.speed; 
+                if (this.y <= this.targetY) this.exploded = true;
+            }
+            explode() {
+                this.particles.forEach(([dx, dy]) => {
+                    fireworks.push(new Particle(this.x, this.y, this.color, dx*Math.random()*8, dy*Math.random()*8));
+                });
+            }
+            update() {
+                this.exploded ? this.explode() : this.rise();
+                return !this.exploded;
+            }
+        }
+
+        // 主动画循环：倒计时→2026→祝福文字 无缝衔接
+        function animate() {
+            requestAnimationFrame(animate);
+            fwCtx.fillStyle = 'rgba(0,0,0,0.09)'; 
+            fwCtx.fillRect(0,0,fwCanvas.width,fwCanvas.height);
+
+            if (isInited) {
+                // 自动生成烟花（结束后停止）
+                if (Math.random() < cfg.fireworkRate && !isFinished) {
+                    fireworks.push(new TextFirework());
+                }
+                // 更新烟花
+                fireworks = fireworks.filter(f => f.update ? f.update() : f.update());
+
+                // 1. 倒计时阶段（54321）
+                if (!isCdEnd && !isFinished) {
+                    const currentTime = audio.currentTime;
+                    if (cdIdx < cfg.timeline.length) {
+                        const {t, d} = cfg.timeline[cdIdx];
+                        if (currentTime >= t) {
+                            if (d) { 
+                                cdCanvas.style.display = 'block'; 
+                                // 启动倒计时渐变
+                                isCountdownFading = true;
+                                countdownBrightness = 0;
+                                drawDigit(d); 
+                            } else { 
+                                // 倒计时结束，开始显示2026（无渐变）
+                                isCdEnd = true; 
+                                isYearShow = true;
+                                cdCanvas.style.display = 'none';
+                                yearCanvas.style.display = 'block';
+                                draw2026();
+                                yearShowStart = Date.now();
+                                
+                                // 2026出现时生成大量烟花
+                                for (let i = 0; i < 50; i++) {
+                                    fireworks.push(new TextFirework(
+                                        Math.random() * window.innerWidth,
+                                        window.innerHeight + Math.random() * 100
+                                    ));
+                                }
+                            }
+                            cdIdx++;
+                        }
+                    }
+                } 
+                // 2. 2026数字显示阶段
+                else if (isYearShow && !isFinished) {
+                    // 2026显示期间提高烟花生成频率
+                    if (Math.random() < 0.15) { 
+                        fireworks.push(new TextFirework());
+                    }
+                    // 2026显示指定时长后，切换到祝福文字
+                    if (Date.now() - yearShowStart > cfg.yearShowTime) {
+                        isYearShow = false;
+                        yearCanvas.style.display = 'none';
+                        textOverlay.style.opacity = 1;
+                        textEls[0].classList.add('active');
+                        textTime = Date.now();
+                    }
+                }
+                // 3. 祝福文字切换阶段
+                else if (!isFinished) {
+                    const textOrder = [0,1,2,3,4,5,6,7,8,9,10,11,12];
+                    const durations = [800,800,800,800,1500,1500,1200,1200,1200,1500,1500,1500,0];
+                    
+                    // 时间到了，才切换
+                    if (durations[textIdx] > 0 && Date.now() - textTime > durations[textIdx]) {
+                        // 隐藏上一句
+                        textEls[textOrder[textIdx]].classList.remove('active');
+                        // 切换到下一句
+                        textIdx++;
+                        textTime = Date.now();
+                        // 显示新的一句
+                        textEls[textOrder[textIdx]].classList.add('active');
+
+                        // 到最后一句且音乐结束，显示重启按钮
+                        if (textIdx >= 12 && audio.ended) {
+                            isFinished = true;
+                            restartBtn.style.display = 'block';
+                        }
+                    }
+                }
+            }
+        }
+
+        // 🔥监听音乐播放结束事件
+        audio.addEventListener('ended', () => {
+            // 只有当文字到最后一个（2026新年快乐）时，才标记结束
+            if (textIdx >= 12) {
+                isFinished = true;
+                restartBtn.style.display = 'block'; // 显示重启按钮
+            }
+        });
+
+        // 交互事件
+        document.addEventListener('click', (e) => {
+            if (!isInited && !isFinished) { 
+                isInited = true; 
+                clickTip.style.display = 'none'; 
+                audio.play().catch(err => console.log('音乐播放失败：', err)); 
+            } else if (!isFinished) {
+                fireworks.push(new TextFirework(e.clientX, e.clientY));
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (isInited && !isFinished) {
+                if (e.code === 'Space') { 
+                    e.preventDefault(); 
+                    for (let i=0; i<15; i++) {
+                        fireworks.push(new TextFirework());
+                    }
+                }
+                if (e.code === 'F11') { 
+                    e.preventDefault(); 
+                    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); 
+                }
+                if (e.code === 'Escape' && document.fullscreenElement) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        // 🔥重启按钮点击事件：重置所有状态，重新开始
+        restartBtn.addEventListener('click', () => {
+            // 1. 重置所有状态变量
+            isInited = false;
+            isCdEnd = false;
+            isYearShow = false;
+            isFinished = false;
+            cdIdx = 0;
+            textIdx = 0;
+            textTime = 0;
+            yearShowStart = 0;
+            countdownBrightness = 0;
+            isCountdownFading = false;
+            
+            // 2. 清空烟花
+            fireworks = [];
+            
+            // 3. 隐藏重启按钮，显示初始提示
+            restartBtn.style.display = 'none';
+            clickTip.style.display = 'block';
+            
+            // 4. 隐藏所有画布和文字
+            cdCanvas.style.display = 'none';
+            yearCanvas.style.display = 'none';
+            textOverlay.style.opacity = 0;
+            
+            // 5. 重置所有文字的active状态
+            textEls.forEach(el => el.classList.remove('active'));
+            
+            // 6. 重置音乐（回到开头）
+            audio.currentTime = 0;
+        });
+
+        // 启动动画
+        animate();
+    </script>
+</body>
+</html> 
