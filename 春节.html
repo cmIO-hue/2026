@@ -59,18 +59,23 @@
             position: fixed;
             left: 50%;
             top: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -45%); /* 初始轻微上移 */
             margin: 0;
             color: #fff;
             font-size: clamp(24px, 7vw, 60px);
             font-weight: bold;
             text-shadow: 0 0 25px #ffd700, 0 0 50px #ff0000, 0 0 80px #ff0000;
             opacity: 0;
-            transition: opacity 0.5s ease;
-            }
+            transition: opacity 0.5s ease, transform 0.5s ease; /* 新增过渡属性 */
+        }
         .main-text.active {
             opacity: 1;
-            }
+            transform: translate(-50%, -50%); /* 激活后回到居中位置 */
+        }
+        /* 非激活状态文字轻微下移，形成位移过渡 */
+        .main-text:not(.active) {
+            transform: translate(-50%, -55%);
+        }
         .control-panel {
             position: absolute;
             bottom: 20px;
@@ -100,13 +105,13 @@
             padding: 12px 24px;
             border-radius: 18px;
         }
-         /* 核心样式：控制图片位置 */
+        /* 顶部右侧图片样式：固定定位，避免被遮挡 */
         .top-right-image {
-            position: fixed; /* 固定定位，滚动页面时位置不变 */
-            top: 20px;       /* 距离顶部20px，可自行调整 */
-            right: 20px;     /* 距离右侧20px，可自行调整 */
-            width: clamp(80px, 25vw, 120px);   /* 设置图片宽度，高度会自动等比例缩放 */
-            z-index: 101; /* 高于所有元素，避免被遮挡 */
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: clamp(80px, 25vw, 120px);
+            z-index: 101;
         }
     </style>
 </head>
@@ -117,9 +122,7 @@
     >
     <div class="click-tip" id="clickTip">点击屏幕 → 启动音乐+倒计时+烟花</div>
     <canvas id="fireworkCanvas"></canvas>
-    <!-- 倒计时数字画布 -->
     <canvas id="countdownCanvas"></canvas>
-    <!-- 2026像素数字画布 -->
     <canvas id="year2026Canvas"></canvas>
     <div class="text-overlay" id="textOverlay">
         <div class="main-text" id="text0">新</div>
@@ -139,7 +142,6 @@
     <div class="control-panel">
     空格=批量烟花 | F11=全屏 | ESC=退出全屏
     </div>
-    <!-- 新增重启按钮：默认隐藏，结束后显示 -->
     <button id="restartBtn" style="
         position: fixed;
         top: 60%;
@@ -161,42 +163,42 @@
     </button>
 
     <script>
-        // 像素数字点阵（7x9 等宽设计，0和其他数字视觉一致）
+        // 像素数字点阵（7x9等宽设计，保证0/2/6视觉统一）
         const pixelDigits = {
             5: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
             4: [[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
             3: [[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
             2: [[1,1,1,1,1,1,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
             1: [[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1],[0,0,0,0,0,0,1]],
-            // 0：优化点阵，和2/6保持等宽，视觉统一
             0: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],
             6: [[1,1,1,1,1,1,1],[1,0,0,0,0,0,0],[1,0,0,0,0,0,0],[1,1,1,1,1,1,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]]
         };
 
-        // 🔥新增：渐变变白控制变量（仅用于倒计时，2026不再使用）
-        let countdownBrightness = 0;    // 倒计时亮度（0-1，1为纯白）
-        const brightnessStep = 0.09;    // 每次渐变的步长（越小越慢）
-        let isCountdownFading = false;  // 倒计时是否开始渐变
+        // 倒计时渐变相关变量（仅用于5-1倒计时，2026无渐变）
+        let countdownBrightness = 0;
+        const brightnessStep = 0.09;
+        let isCountdownFading = false;
 
-        // 新增：判断是否为手机端（屏幕宽度<768px）
+        // 设备判断：是否为移动端（屏幕宽度<768px）
         const isMobile = window.innerWidth < 768;
 
-        // 核心配置：🔥【2026等宽放大】+ 0视觉统一 + 54321匀速0.8秒
+        // 核心配置参数（统一管理，方便修改）
         const cfg = {
-            digitSize: isMobile ? 40 : 50,     // 倒计时数字大小
-            yearDigitSize: isMobile ? 300 : 400, // 2026数字大小（放大更醒目）
-            color: '#ffd700',  // 像素主色（金色）
-            glow: '#ff9900',   // 发光色（暖橙金，更柔和）
-            year2026Color: '#ff0000', // 2026数字主色（红色）
-            year2026Glow: '#ff3333',  // 2026发光色（亮红）
-            interval: 0.8,     // 倒计时数字统一间隔（秒）
-            startT: 4.5,       // 倒计时启动时间（人声结束瞬间）
-            fireworkRate: isMobile ? 0.02 : 0.03,// 烟花自动生成速度
-            yearShowTime: 8000,// 2026数字显示时长（毫秒）
-            digitGap: 3,       // 2026数字间距（适中，不拥挤）
-            scaleRatio: isMobile ? 1.0 : 1.2   // 2026整体r缩放比例（更大占比）
+            digitSize: isMobile ? 40 : 50,
+            yearDigitSize: isMobile ? 300 : 400,
+            color: '#ffd700',
+            glow: '#ff9900',
+            year2026Color: '#ff0000',
+            year2026Glow: '#ff3333',
+            interval: 0.8,
+            startT: 4.5,
+            fireworkRate: isMobile ? 0.02 : 0.03,
+            yearShowTime: 8000,
+            digitGap: 3,
+            scaleRatio: isMobile ? 1.0 : 1.2
         };
-        // 自动生成匀速时间轴
+
+        // 自动生成倒计时时间轴（5→4→3→2→1→结束）
         cfg.timeline = [
             {t: cfg.startT, d: 5},
             {t: cfg.startT + cfg.interval, d: 4},
@@ -206,27 +208,42 @@
             {t: cfg.startT + cfg.interval*5, d: null}
         ];
 
-        // 全局元素初始化
+        // 全局元素初始化（获取页面DOM元素和画布上下文）
         const [fwCanvas, fwCtx] = [document.getElementById('fireworkCanvas'), document.getElementById('fireworkCanvas').getContext('2d')];
         const [cdCanvas, cdCtx] = [document.getElementById('countdownCanvas'), document.getElementById('countdownCanvas').getContext('2d')];
         const [yearCanvas, yearCtx] = [document.getElementById('year2026Canvas'), document.getElementById('year2026Canvas').getContext('2d')];
         const [textOverlay, clickTip] = [document.getElementById('textOverlay'), document.getElementById('clickTip')];
         const textEls = Array.from(document.querySelectorAll('.main-text'));
-        const restartBtn = document.getElementById('restartBtn'); // 🔥新增重启按钮变量
+        const restartBtn = document.getElementById('restartBtn');
         let [isInited, isCdEnd, isYearShow, cdIdx, textIdx, textTime, yearShowStart] = [false, false, false, 0, 0, 0, 0];
-        let isFinished = false; // 🔥新增：标记流程是否结束
-        // 背景音乐（保留你的路径）
+        let isFinished = false;
+
+        // 顶部图片加载容错（加载失败隐藏，避免占位符影响视觉）
+        const springImg = document.querySelector('.top-right-image');
+        springImg.onerror = function() {
+            this.style.display = 'none';
+        };
+
+        // 背景音乐初始化
         const audio = new Audio("./终会与你同行.mp3"); 
         audio.loop = false; audio.volume = 0.9; audio.preload = 'auto';
 
-        // 烟花文字列表+配色
+        // 音乐加载状态提示（就绪/失败分别更新提示文字）
+        audio.oncanplaythrough = function() {
+            clickTip.textContent = '点击屏幕 → 启动音乐+倒计时+烟花（音乐已就绪）';
+        };
+        audio.onerror = function() {
+            clickTip.textContent = '点击屏幕 → 启动倒计时+烟花（音乐加载失败）';
+        };
+
+        // 烟花配置（文字列表+配色方案）
         const fwTexts = ["5","4","3","2","1","2026","新","年","快","乐","2026新年快乐"];
         const colors = ['#ff0000','#ff6600','#ffd700','#ffff00','#00ff00','#00ffff','#9900ff','#ffffff'];
         let fireworks = [];
 
-        // 画布自适应：窗口缩放时，所有数字始终居中，2026等宽放大
+        // 画布自适应函数（窗口缩放时重置画布大小，保证元素居中不变形）
         function resize() {
-            // 烟花画布
+            // 烟花画布适配
             fwCanvas.width = window.innerWidth;
             fwCanvas.height = window.innerHeight;
 
@@ -238,7 +255,7 @@
             cdCanvas.style.height = `${9 * cfg.digitSize * cdScale}px`;
             cdCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-            // 2026画布适配：等宽放大，预留间距
+            // 2026画布适配（等宽放大，预留数字间距）
             const totalWidth = 4 * (7 + cfg.digitGap) * cfg.yearDigitSize;
             const yearScale = Math.min(window.innerWidth, window.innerHeight) * cfg.scaleRatio / totalWidth;
             yearCanvas.width = totalWidth * yearScale * window.devicePixelRatio;
@@ -250,18 +267,18 @@
         resize(); 
         window.addEventListener('resize', resize);
 
-        // 绘制单个像素数字（倒计时用，保留渐变变白效果）
+        // 绘制单个倒计时数字（带金色→白色渐变效果）
         function drawDigit(d) {
             const scale = Math.min(window.innerWidth, window.innerHeight) * 0.3 / (7 * cfg.digitSize);
             cdCtx.clearRect(0, 0, cdCanvas.width/window.devicePixelRatio, cdCanvas.height/window.devicePixelRatio);
             
-            // 计算渐变颜色（从金色→白色）
+            // 计算渐变颜色值
             const baseColor = cfg.color.replace('#', '');
             const r = parseInt(baseColor.slice(0, 2), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(0, 2), 16)));
             const g = parseInt(baseColor.slice(2, 4), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(2, 4), 16)));
             const b = parseInt(baseColor.slice(4, 6), 16) + Math.floor(countdownBrightness * (255 - parseInt(baseColor.slice(4, 6), 16)));
             
-            // 发光效果渐变
+            // 计算发光效果渐变
             const glowColor = cfg.glow.replace('#', '');
             const glowR = parseInt(glowColor.slice(0, 2), 16) + Math.floor(countdownBrightness * (255 - parseInt(glowColor.slice(0, 2), 16)));
             const glowG = parseInt(glowColor.slice(2, 4), 16) + Math.floor(countdownBrightness * (255 - parseInt(glowColor.slice(2, 4), 16)));
@@ -271,6 +288,7 @@
             cdCtx.shadowBlur = 30 * scale + countdownBrightness * 20 * scale; 
             cdCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             
+            // 遍历点阵绘制数字
             pixelDigits[d].forEach((row, y) => {
                 row.forEach((dot, x) => {
                     if (dot) cdCtx.fillRect(
@@ -282,7 +300,7 @@
                 });
             });
             
-            // 渐变进度更新
+            // 更新渐变亮度（循环直到纯白）
             if (isCountdownFading && countdownBrightness < 1) {
                 countdownBrightness += brightnessStep;
                 if (countdownBrightness > 1) countdownBrightness = 1;
@@ -290,23 +308,24 @@
             }
         }
 
-        // 绘制2026像素数字：等宽放大，直接显示红色（无渐变）
+        // 绘制2026像素数字（等宽放大，霓虹渐变效果，无渐变）
         function draw2026() {
             const totalWidth = 4 * (7 + cfg.digitGap) * cfg.yearDigitSize;
             const scale = Math.min(window.innerWidth, window.innerHeight) * cfg.scaleRatio / totalWidth;
             yearCtx.clearRect(0, 0, yearCanvas.width/window.devicePixelRatio, yearCanvas.height/window.devicePixelRatio);
             
-            // 霓虹渐变效果：红色→金色
+            // 创建线性渐变（红→金→红）
             const gradient = yearCtx.createLinearGradient(0, 0, totalWidth * scale, 0);
             gradient.addColorStop(0, '#ff0000');
             gradient.addColorStop(0.5, '#ffd700');
             gradient.addColorStop(1, '#ff0000');
             
-            // 双层发光：外层红色光晕+内层金色光晕
+            // 设置发光效果和填充样式
             yearCtx.shadowColor = '#ff3333';
             yearCtx.shadowBlur = 60 * scale;
             yearCtx.fillStyle = gradient;
             
+            // 遍历2026四个数字绘制
             const yearDigits = [2,0,2,6];
             yearDigits.forEach((digit, idx) => {
                 const offsetX = idx * (7 + cfg.digitGap) * cfg.yearDigitSize * scale;
@@ -323,7 +342,7 @@
             });
         }
 
-        // 烟花粒子类
+        // 烟花粒子类（单个粒子的运动和渲染）
         class Particle {
             constructor(x, y, c, dx, dy) {
                 this.x = x; this.y = y; this.c = c;
@@ -349,11 +368,11 @@
             }
         }
 
-        // 文字烟花类
+        // 文字烟花类（支持传入指定文字，实现文字形状的烟花爆炸）
         class TextFirework {
-            constructor(x = Math.random()*window.innerWidth, y = window.innerHeight) {
+            constructor(x = Math.random()*window.innerWidth, y = window.innerHeight, text = null) {
                 this.x = x; this.y = y;
-                this.text = fwTexts[Math.floor(Math.random()*fwTexts.length)];
+                this.text = text || fwTexts[Math.floor(Math.random()*fwTexts.length)];
                 this.color = colors[Math.floor(Math.random()*colors.length)];
                 this.speed = Math.random()*10+7; 
                 this.targetY = Math.random()*(window.innerHeight/2)+80; 
@@ -361,6 +380,7 @@
                 this.particles = []; 
                 this.genTextPath(); 
             }
+            // 生成文字点阵路径（离线画布生成）
             genTextPath() {
                 const tCanvas = document.createElement('canvas'); 
                 const tCtx = tCanvas.getContext('2d');
@@ -380,6 +400,7 @@
                     }
                 }
             }
+            // 烟花上升阶段
             rise() {
                 fwCtx.beginPath(); 
                 fwCtx.arc(this.x, this.y, 5, 0, Math.PI*2); 
@@ -388,32 +409,34 @@
                 this.y -= this.speed; 
                 if (this.y <= this.targetY) this.exploded = true;
             }
+            // 烟花爆炸阶段（生成粒子）
             explode() {
                 this.particles.forEach(([dx, dy]) => {
                     fireworks.push(new Particle(this.x, this.y, this.color, dx*Math.random()*8, dy*Math.random()*8));
                 });
             }
+            // 更新烟花状态（上升/爆炸切换）
             update() {
                 this.exploded ? this.explode() : this.rise();
                 return !this.exploded;
             }
         }
 
-        // 主动画循环：倒计时→2026→祝福文字 无缝衔接
+        // 主动画循环（核心流程：倒计时→2026→祝福文字→结束）
         function animate() {
             requestAnimationFrame(animate);
             fwCtx.fillStyle = 'rgba(0,0,0,0.09)'; 
             fwCtx.fillRect(0,0,fwCanvas.width,fwCanvas.height);
 
             if (isInited) {
-                // 自动生成烟花（结束后停止）
-                if (Math.random() < cfg.fireworkRate && !isFinished) {
+                // 自动生成烟花（限制最大数量200，避免性能过载）
+                if (Math.random() < cfg.fireworkRate && !isFinished && fireworks.length < 200) {
                     fireworks.push(new TextFirework());
                 }
-                // 更新烟花
+                // 更新所有烟花/粒子状态，过滤已消亡的元素
                 fireworks = fireworks.filter(f => f.update ? f.update() : f.update());
 
-                // 1. 倒计时阶段（54321）
+                // 1. 倒计时阶段（5→4→3→2→1）
                 if (!isCdEnd && !isFinished) {
                     const currentTime = audio.currentTime;
                     if (cdIdx < cfg.timeline.length) {
@@ -421,12 +444,11 @@
                         if (currentTime >= t) {
                             if (d) { 
                                 cdCanvas.style.display = 'block'; 
-                                // 启动倒计时渐变
                                 isCountdownFading = true;
                                 countdownBrightness = 0;
                                 drawDigit(d); 
                             } else { 
-                                // 倒计时结束，开始显示2026（无渐变）
+                                // 倒计时结束，切换到2026显示
                                 isCdEnd = true; 
                                 isYearShow = true;
                                 cdCanvas.style.display = 'none';
@@ -434,7 +456,7 @@
                                 draw2026();
                                 yearShowStart = Date.now();
                                 
-                                // 2026出现时生成大量烟花
+                                // 2026出现时生成大量烟花，增强氛围
                                 for (let i = 0; i < 50; i++) {
                                     fireworks.push(new TextFirework(
                                         Math.random() * window.innerWidth,
@@ -446,13 +468,12 @@
                         }
                     }
                 } 
-                // 2. 2026数字显示阶段
+                // 2. 2026数字显示阶段（指定时长后切换到祝福文字）
                 else if (isYearShow && !isFinished) {
-                    // 2026显示期间提高烟花生成频率
+                    // 优先生成"2026"文字烟花，呼应当前视觉
                     if (Math.random() < 0.15) { 
-                        fireworks.push(new TextFirework());
+                        fireworks.push(new TextFirework(undefined, undefined, '2026'));
                     }
-                    // 2026显示指定时长后，切换到祝福文字
                     if (Date.now() - yearShowStart > cfg.yearShowTime) {
                         isYearShow = false;
                         yearCanvas.style.display = 'none';
@@ -461,22 +482,18 @@
                         textTime = Date.now();
                     }
                 }
-                // 3. 祝福文字切换阶段
+                // 3. 祝福文字切换阶段（按预设时长轮播显示）
                 else if (!isFinished) {
                     const textOrder = [0,1,2,3,4,5,6,7,8,9,10,11,12];
                     const durations = [800,800,800,800,1500,1500,1200,1200,1200,1500,1500,1500,0];
                     
-                    // 时间到了，才切换
                     if (durations[textIdx] > 0 && Date.now() - textTime > durations[textIdx]) {
-                        // 隐藏上一句
                         textEls[textOrder[textIdx]].classList.remove('active');
-                        // 切换到下一句
                         textIdx++;
                         textTime = Date.now();
-                        // 显示新的一句
                         textEls[textOrder[textIdx]].classList.add('active');
 
-                        // 到最后一句且音乐结束，显示重启按钮
+                        // 最后一句且音乐结束，标记流程完成，显示重启按钮
                         if (textIdx >= 12 && audio.ended) {
                             isFinished = true;
                             restartBtn.style.display = 'block';
@@ -486,16 +503,15 @@
             }
         }
 
-        // 🔥监听音乐播放结束事件
+        // 监听音乐播放结束事件（完成流程闭环）
         audio.addEventListener('ended', () => {
-            // 只有当文字到最后一个（2026新年快乐）时，才标记结束
             if (textIdx >= 12) {
                 isFinished = true;
-                restartBtn.style.display = 'block'; // 显示重启按钮
+                restartBtn.style.display = 'block';
             }
         });
 
-        // 交互事件
+        // 页面交互事件（点击启动/触发烟花）
         document.addEventListener('click', (e) => {
             if (!isInited && !isFinished) { 
                 isInited = true; 
@@ -505,6 +521,8 @@
                 fireworks.push(new TextFirework(e.clientX, e.clientY));
             }
         });
+
+        // 键盘交互事件（空格批量烟花/F11全屏/ESC退出全屏）
         document.addEventListener('keydown', (e) => {
             if (isInited && !isFinished) {
                 if (e.code === 'Space') { 
@@ -523,9 +541,9 @@
             }
         });
 
-        // 🔥重启按钮点击事件：重置所有状态，重新开始
+        // 重启按钮点击事件（重置所有状态，重新开始流程）
         restartBtn.addEventListener('click', () => {
-            // 1. 重置所有状态变量
+            // 重置状态变量
             isInited = false;
             isCdEnd = false;
             isYearShow = false;
@@ -537,27 +555,23 @@
             countdownBrightness = 0;
             isCountdownFading = false;
             
-            // 2. 清空烟花
+            // 清空烟花数组
             fireworks = [];
             
-            // 3. 隐藏重启按钮，显示初始提示
+            // 重置页面元素显示状态
             restartBtn.style.display = 'none';
             clickTip.style.display = 'block';
-            
-            // 4. 隐藏所有画布和文字
             cdCanvas.style.display = 'none';
             yearCanvas.style.display = 'none';
             textOverlay.style.opacity = 0;
-            
-            // 5. 重置所有文字的active状态
             textEls.forEach(el => el.classList.remove('active'));
             
-            // 6. 重置音乐（回到开头）
+            // 重置音乐播放进度
             audio.currentTime = 0;
         });
 
-        // 启动动画
+        // 启动主动画循环
         animate();
     </script>
 </body>
-</html> 
+</html>
